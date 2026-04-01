@@ -833,6 +833,7 @@ name = "otter"
 version = "0.1.0"
 dependencies = [
  "jsonschema",
+ "regex",
  "serde_json",
 ]
 

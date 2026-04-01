@@ -1,4 +1,5 @@
 use serde_json::Value;
+use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SchemaViolation {
@@ -20,6 +21,22 @@ pub enum ValidationReport {
     ParseError(ParseErrorInfo),
     SchemaErrors { violations: Vec<SchemaViolation> },
     InvalidSchema { message: String },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RepairRule {
+    TrimWhitespace,
+    CoerceStringToNumber,
+    ApplyDefault { field: String, default_value: Value },
+
+    Custom { name: String, description: String },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RepairResult {
+    pub repaired: String,
+    pub rule: Vec<RepairRule>,
+    pub confidence_level: f64,
 }
 
 pub fn validate(output: &str, schema: &Value) -> ValidationReport {
@@ -60,6 +77,150 @@ pub fn validate(output: &str, schema: &Value) -> ValidationReport {
         }
     } else {
         ValidationReport::SchemaErrors { violations }
+    }
+}
+
+pub fn fix_trailing_commas(input: &str) -> Option<String> {
+    let re = Regex::new(r",(\s*[}\]])").unwrap();
+    let result = re.replace_all(input, "$1");
+
+    if result == input {
+        None
+    } else {
+        Some(result.into_owned())
+    }
+}
+
+pub fn fix_single_quotes(input: &str) -> Option<String> {
+    let re = Regex::new(r"'([^']+)'").unwrap();
+    let result = re.replace_all(input, r#""$1""#);
+
+    if result == input {
+        None
+    } else {
+        Some(result.into_owned())
+    }
+}
+
+pub fn fix_unquoted_keys(input: &str) -> Option<String> {
+    let re = Regex::new(r"([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:").unwrap();
+    let result = re.replace_all(input, r#"$1"$2":"#);
+
+    if result == input {
+        None
+    } else {
+        Some(result.into_owned())
+    }
+}
+
+pub fn fix_python_booleans(input: &str) -> Option<String> {
+    let re_true = Regex::new(r"\bTrue\b").unwrap();
+    let re_false = Regex::new(r"\bFalse\b").unwrap();
+    let re_none = Regex::new(r"\bNone\b").unwrap();
+    let result = re_true.replace_all(input, "true");
+    let result = re_false.replace_all(&result, "false");
+    let result = re_none.replace_all(&result, "null");
+
+    if result == input {
+        None
+    } else {
+        Some(result.into_owned())
+    }
+}
+
+pub fn fix_truncated_json(input: &str) -> Option<String> {
+    let mut in_string = false;
+    let mut is_escaped = false;
+
+    let mut stack = Vec::new();
+
+    for c in input.chars() {
+        if is_escaped {
+            is_escaped = false;
+            continue;
+        }
+
+        if c == '\\' {
+            is_escaped = true;
+            continue;
+        }
+
+        if c == '"' {
+            in_string = !in_string;
+            continue;
+        }
+
+        if !in_string {
+            match c {
+                ']' => {
+                    if stack.last() == Some(&'[') {
+                        stack.pop();
+                    }
+                }
+                '}' => {
+                    if stack.last() == Some(&'{') {
+                        stack.pop();
+                    }
+                }
+                '[' | '{' => {
+                    stack.push(c);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut repaired = input.to_string();
+
+    if in_string {
+        repaired.push('"');
+    }
+
+
+    while let Some(top) = stack.pop() {
+        if top == '[' {
+            repaired.push(']');
+        } else if top == '{' {
+            repaired.push('}');
+        }
+    }
+
+    if repaired == input {
+        None
+    } else {
+        Some(repaired)
+    }
+}
+
+pub fn strip_markdown_fences(input: &str) -> Option<String> {
+    let re = Regex::new(r"```\s*(?:json)?\s*([\s\S]*?)\s*```").unwrap();
+    let result = re.replace_all(input, "$1");
+
+    if result == input {
+        None
+    } else {
+        Some(result.into_owned())
+    }
+}
+
+pub fn extract_json_payload(input: &str) -> Option<String> {
+    let first = input.find(&['{', '['][..]);
+    let last = input.rfind(&['}', ']'][..]);
+
+    if let (Some(f), Some(l)) = (first, last) {
+        if f <= l {
+            let actually_trimmed = f > 0 || l + 1 < input.len();
+
+            if actually_trimmed {
+                Some(input[f..=l].to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
     }
 }
 
@@ -259,7 +420,6 @@ mod tests {
     }
 
     /// Mistake #10: Empty string where minLength > 0
-    /// Mistake #10: Empty string where minLength > 0
     #[test]
     fn test_llm_mistake_empty_string_minlength() {
         let schema = json!({
@@ -335,5 +495,63 @@ mod tests {
         } else {
             panic!("Expected Valid variant with parsed value");
         }
+    }
+
+    /// Ensure fix_trailing_commas removes trailing commas from JSON input
+    #[test]
+    fn test_fix_trailing_commas() {
+        let input = r#"{"answer": 42,}"#;
+        let fixed = fix_trailing_commas(input);
+        assert_eq!(fixed, Some(r#"{"answer": 42}"#.to_string()));
+    }
+
+    /// Ensure fix_single_quotes replaces single quotes with double quotes
+    #[test]
+    fn test_fix_single_quotes() {
+        let input = r#"{"answer": 42, "name": 'John'}"#;
+        let fixed = fix_single_quotes(input);
+        assert_eq!(fixed, Some(r#"{"answer": 42, "name": "John"}"#.to_string()));
+    }
+
+    /// Ensure fix_unquoted_keys replaces unquoted keys with double-quoted keys
+    #[test]
+    fn test_fix_unquoted_keys() {
+        let input = r#"{"answer": 42, name: "John"}"#;
+        let fixed = fix_unquoted_keys(input);
+        assert_eq!(fixed, Some(r#"{"answer": 42, "name": "John"}"#.to_string()));
+    }
+
+    /// Ensure fix_python_booleans replaces Python boolean literals with JSON equivalents
+    #[test]
+    fn test_fix_python_booleans() {
+        let input = r#"{"answer": 42, "name": "John", "is_active": True, "is_deleted": False, "is_null": None}"#;
+        let fixed = fix_python_booleans(input);
+        assert_eq!(fixed, Some(r#"{"answer": 42, "name": "John", "is_active": true, "is_deleted": false, "is_null": null}"#.to_string()));
+    }
+
+    /// Ensure fix_truncated_json works correctly with truncated JSON input
+    #[test]
+    fn test_fix_truncated_json() {
+        let input = r#"{"users": [{"name": "Alice"#;
+        let fixed = fix_truncated_json(input);
+        assert_eq!(fixed, Some(r#"{"users": [{"name": "Alice"}]}"#.to_string()));
+    }
+
+    /// Ensure strip_markdown_fences removes markdown code fences from input
+    #[test]
+    fn test_strip_markdown_fences() {
+        let input = r#"```json
+        {"answer": 42, "name": "John"}
+        ```"#;
+        let fixed = strip_markdown_fences(input);
+        assert_eq!(fixed, Some(r#"{"answer": 42, "name": "John"}"#.to_string()));
+    }
+
+    /// Ensure extract_json_payload extracts the JSON payload from a string
+    #[test]
+    fn test_extract_json_payload() {
+        let input = "Here is the data:\n{\"name\": \"Otter\"}\nHope this helps!";
+        let fixed = extract_json_payload(input);
+        assert_eq!(fixed, Some(r#"{"name": "Otter"}"#.to_string()));
     }
 }
