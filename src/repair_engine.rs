@@ -36,6 +36,8 @@ pub enum RepairRule {
     FixSingleQuotes,
     FixUnquotedKeys,
     FixPythonBooleans,
+    FixWrongNumericTypes,
+    FixNullValues,
 
     Custom { name: String, description: String, cost: f32 },
 }
@@ -50,6 +52,8 @@ impl RepairRule {
             Self::FixSingleQuotes      => 0.12,
             Self::FixUnquotedKeys      => 0.15,
             Self::FixTruncatedJson     => 0.40,
+            Self::FixWrongNumericTypes => 0.05,
+            Self::FixNullValues        => 0.10,
 
             Self::Custom { cost, .. } => cost.clamp(0.0, 1.0),
         }
@@ -248,7 +252,52 @@ pub fn extract_json_payload(input: &str) -> Option<String> {
     }
 }
 
-pub fn repair(input: &str) -> RepairResult {
+pub fn apply_schema_repairs(data: &mut serde_json::Value, schema: &serde_json::Value, applied_rules: &mut Vec<RepairRule>) {
+    if data.is_string() {
+        if let Some(typ) = schema.get("type").and_then(|v| v.as_str()) {
+            if typ == "number" || typ == "integer" {
+                if let Some(text) = data.as_str() {
+                    match text.parse::<f64>() {
+                        Ok(val) => {
+                            if let Some(num) = serde_json::Number::from_f64(val) {
+                                *data = serde_json::Value::Number(num);
+                                applied_rules.push(RepairRule::FixWrongNumericTypes);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to parse '{}' as number: {}", text, e);
+                        },
+                    }
+                }
+            }
+        }
+    } else if data.is_null() {
+        if let Some(def) = schema.get("default") {
+            *data = def.clone();
+            applied_rules.push(RepairRule::FixNullValues);
+        }
+    } else {
+        if let Some(arr) = data.as_array_mut() {
+            if let Some(items_schema) = schema.get("items") {
+                for elm in arr.iter_mut() {
+                    apply_schema_repairs(elm, items_schema, applied_rules);
+                }
+            }
+        }
+
+        if let Some (obj) = data.as_object_mut() {
+            if let Some(properties) = schema.get("properties") {
+                for (key, value) in obj.iter_mut() {
+                    if let Some(prop_schema) = properties.get(key) {
+                        apply_schema_repairs(value, prop_schema, applied_rules);
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn repair(input: &str, schema: &Value) -> RepairResult {
     let mut current_string = input.to_string();
     let mut applied_rules = Vec::new();
 
@@ -285,6 +334,20 @@ pub fn repair(input: &str) -> RepairResult {
     if let Some(json) = fix_python_booleans(&current_string) {
         current_string = json;
         applied_rules.push(RepairRule::FixPythonBooleans);
+    }
+
+    // applying schema level repairs
+    let json_value: Option<Value> = match serde_json::from_str(&current_string) {
+        Ok(value) => Some(value),
+        Err(e) => {
+            eprintln!("Failed to parse JSON string: {}", e);
+            None
+        }
+    };
+
+    if let Some(mut json_value) = json_value {
+        apply_schema_repairs(&mut json_value, schema, &mut applied_rules);
+        current_string = serde_json::to_string(&json_value).unwrap_or_default();
     }
 
     let confidence = confidence::compute_confidence(&applied_rules, &current_string);

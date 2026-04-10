@@ -1,0 +1,886 @@
+[
+  {
+    "name": "valid_user_object",
+    "description": "Already valid JSON - should remain unchanged",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "age": { "type": "integer" }
+      },
+      "required": ["name", "age"]
+    },
+    "input": "{\"name\": \"Alice\", \"age\": 30}",
+    "expected_repair": "{\"name\":\"Alice\",\"age\":30}",
+    "should_repair": true
+  },
+  {
+    "name": "markdown_fences_simple",
+    "description": "LLM wraps JSON in markdown code fences",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "input": "```json\n{\"name\": \"Bob\"}\n```",
+    "expected_repair": "{\"name\":\"Bob\"}",
+    "should_repair": true
+  },
+  {
+    "name": "markdown_fences_no_lang",
+    "description": "LLM uses code fences without language hint",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" }
+      },
+      "required": ["status"]
+    },
+    "input": "```\n{\"status\": \"ok\"}\n```",
+    "expected_repair": "{\"status\":\"ok\"}",
+    "should_repair": true
+  },
+  {
+    "name": "trailing_comma_object",
+    "description": "Trailing comma after last property",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "input": "{\"name\": \"Carol\", \"email\": \"carol@example.com\",}",
+    "expected_repair": "{\"name\":\"Carol\",\"email\":\"carol@example.com\"}",
+    "should_repair": true
+  },
+  {
+    "name": "trailing_comma_array",
+    "description": "Trailing comma in array",
+    "schema": {
+      "type": "array",
+      "items": { "type": "integer" }
+    },
+    "input": "[1, 2, 3,]",
+    "expected_repair": "[1,2,3]",
+    "should_repair": true
+  },
+  {
+    "name": "single_quotes_values",
+    "description": "LLM uses single quotes for string values",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "greeting": { "type": "string" }
+      },
+      "required": ["greeting"]
+    },
+    "input": "{\"greeting\": 'Hello World'}",
+    "expected_repair": "{\"greeting\":\"Hello World\"}",
+    "should_repair": true
+  },
+  {
+    "name": "single_quotes_keys_and_values",
+    "description": "LLM uses single quotes for both keys and values",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" }
+      },
+      "required": ["key"]
+    },
+    "input": "{'key': 'value123'}",
+    "expected_repair": "{\"key\":\"value123\"}",
+    "should_repair": true
+  },
+  {
+    "name": "unquoted_keys",
+    "description": "LLM outputs unquoted object keys",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" }
+      },
+      "required": ["firstName"]
+    },
+    "input": "{firstName: \"John\", lastName: \"Doe\"}",
+    "expected_repair": "{\"firstName\":\"John\",\"lastName\":\"Doe\"}",
+    "should_repair": true
+  },
+  {
+    "name": "python_booleans",
+    "description": "LLM uses Python-style booleans",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "active": { "type": "boolean" },
+        "deleted": { "type": "boolean" }
+      },
+      "required": ["active"]
+    },
+    "input": "{\"active\": True, \"deleted\": False}",
+    "expected_repair": "{\"active\":true,\"deleted\":false}",
+    "should_repair": true
+  },
+  {
+    "name": "python_none",
+    "description": "LLM uses Python None instead of JSON null",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "middleName": { "type": ["string", "null"] }
+      }
+    },
+    "input": "{\"middleName\": None}",
+    "expected_repair": "{\"middleName\":null}",
+    "should_repair": true
+  },
+  {
+    "name": "truncated_nested_object",
+    "description": "LLM output is cut off mid-nested-object",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" }
+          }
+        }
+      }
+    },
+    "input": "{\"user\": {\"name\": \"Dave\"",
+    "expected_repair": "{\"user\":{\"name\":\"Dave\"}}",
+    "should_repair": true
+  },
+  {
+    "name": "truncated_array",
+    "description": "LLM output is cut off mid-array",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "input": "{\"tags\": [\"rust\", \"python\"",
+    "expected_repair": "{\"tags\":[\"rust\",\"python\"]}",
+    "should_repair": true
+  },
+  {
+    "name": "truncated_string_value",
+    "description": "LLM output cut off inside a string value",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bio": { "type": "string" }
+      }
+    },
+    "input": "{\"bio\": \"I am a soft",
+    "expected_repair": "{\"bio\":\"I am a soft\"}",
+    "should_repair": true
+  },
+  {
+    "name": "combined_markdown_and_trailing_comma",
+    "description": "LLM output has markdown fences AND trailing comma",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" }
+      },
+      "required": ["id"]
+    },
+    "input": "```json\n{\"id\": 42,}\n```",
+    "expected_repair": "{\"id\":42}",
+    "should_repair": true
+  },
+  {
+    "name": "combined_single_quotes_and_python_bool",
+    "description": "Single quotes + Python booleans",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "verified": { "type": "boolean" }
+      },
+      "required": ["name", "verified"]
+    },
+    "input": "{'name': 'Eve', 'verified': True}",
+    "expected_repair": "{\"name\":\"Eve\",\"verified\":true}",
+    "should_repair": true
+  },
+  {
+    "name": "combined_unquoted_keys_and_trailing_comma",
+    "description": "Unquoted keys + trailing comma",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      },
+      "required": ["x", "y"]
+    },
+    "input": "{x: 1.5, y: 2.5,}",
+    "expected_repair": "{\"x\":1.5,\"y\":2.5}",
+    "should_repair": true
+  },
+  {
+    "name": "combined_markdown_unquoted_single_python",
+    "description": "All common LLM mistakes at once",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "result": { "type": "string" },
+        "success": { "type": "boolean" },
+        "count": { "type": "integer" }
+      },
+      "required": ["result", "success"]
+    },
+    "input": "```json\n{result: 'ok', success: True, count: 5,}\n```",
+    "expected_repair": "{\"result\":\"ok\",\"success\":true,\"count\":5}",
+    "should_repair": true
+  },
+  {
+    "name": "null_with_default_string",
+    "description": "Null value replaced with schema default",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "default": "user" }
+      },
+      "required": ["role"]
+    },
+    "input": "{\"role\": null}",
+    "expected_repair": "{\"role\":\"user\"}",
+    "should_repair": true
+  },
+  {
+    "name": "null_with_default_number",
+    "description": "Null value replaced with numeric default",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "score": { "type": "number", "default": 0 }
+      },
+      "required": ["score"]
+    },
+    "input": "{\"score\": null}",
+    "expected_repair": "{\"score\":0}",
+    "should_repair": true
+  },
+  {
+    "name": "nested_null_defaults",
+    "description": "Nested objects with null values replaced by defaults",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "settings": {
+          "type": "object",
+          "properties": {
+            "theme": { "type": "string", "default": "light" },
+            "fontSize": { "type": "integer", "default": 14 }
+          }
+        }
+      }
+    },
+    "input": "{\"settings\": {\"theme\": null, \"fontSize\": null}}",
+    "expected_repair": "{\"settings\":{\"theme\":\"light\",\"fontSize\":14}}",
+    "should_repair": true
+  },
+  {
+    "name": "string_number_to_number",
+    "description": "Numeric string converted to number by schema repair",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "port": { "type": "integer" }
+      },
+      "required": ["port"]
+    },
+    "input": "{\"port\": \"8080\"}",
+    "expected_repair": "{\"port\":8080.0}",
+    "should_repair": true
+  },
+  {
+    "name": "array_of_objects_with_string_numbers",
+    "description": "Array items with numeric strings converted",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" }
+        }
+      }
+    },
+    "input": "[{\"id\": \"1\"}, {\"id\": \"2\"}]",
+    "expected_repair": "[{\"id\":1.0},{\"id\":2.0}]",
+    "should_repair": true
+  },
+  {
+    "name": "valid_array_unchanged",
+    "description": "Valid array input should not be corrupted",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "input": "[\"a\", \"b\", \"c\"]",
+    "expected_repair": "[\"a\",\"b\",\"c\"]",
+    "should_repair": true
+  },
+  {
+    "name": "chat_prefix_text",
+    "description": "LLM adds conversational prefix before JSON",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "answer": { "type": "string" }
+      },
+      "required": ["answer"]
+    },
+    "input": "Sure! Here is the response:\n{\"answer\": \"Yes, I agree.\"}\nLet me know if you need anything else.",
+    "expected_repair": "{\"answer\":\"Yes, I agree.\"}",
+    "should_repair": true
+  },
+  {
+    "name": "chat_suffix_text",
+    "description": "LLM adds text after JSON payload",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "integer" },
+        "message": { "type": "string" }
+      },
+      "required": ["code"]
+    },
+    "input": "{\"code\": 200, \"message\": \"OK\"}\nHope that helps!",
+    "expected_repair": "{\"code\":200,\"message\":\"OK\"}",
+    "should_repair": true
+  },
+  {
+    "name": "deeply_nested_truncated",
+    "description": "Truncated deeply nested structure",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "input": "{\"data\": {\"items\": [{\"name\": \"first\"}, {\"name\": \"second\"",
+    "expected_repair": "{\"data\":{\"items\":[{\"name\":\"first\"}]}}",
+    "should_repair": true
+  },
+  {
+    "name": "markdown_fences_array",
+    "description": "Markdown fences around array",
+    "schema": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "input": "```json\n[\"alpha\", \"beta\", \"gamma\"]\n```",
+    "expected_repair": "[\"alpha\",\"beta\",\"gamma\"]",
+    "should_repair": true
+  },
+  {
+    "name": "mixed_quote_styles",
+    "description": "Mix of single and double quotes in same output",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" }
+      },
+      "required": ["title"]
+    },
+    "input": "{\"title\": 'My Title', \"subtitle\": \"A subtitle\"}",
+    "expected_repair": "{\"title\":\"My Title\",\"subtitle\":\"A subtitle\"}",
+    "should_repair": true
+  },
+  {
+    "name": "python_bool_in_array",
+    "description": "Python booleans inside array of objects",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" }
+        }
+      }
+    },
+    "input": "[{\"enabled\": True}, {\"enabled\": False}]",
+    "expected_repair": "[{\"enabled\":true},{\"enabled\":false}]",
+    "should_repair": true
+  },
+  {
+    "name": "valid_nested_object_unchanged",
+    "description": "Valid nested object should pass through cleanly",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "integer" },
+            "name": { "type": "string" }
+          },
+          "required": ["id", "name"]
+        }
+      },
+      "required": ["user"]
+    },
+    "input": "{\"user\": {\"id\": 1, \"name\": \"Frank\"}}",
+    "expected_repair": "{\"user\":{\"id\":1,\"name\":\"Frank\"}}",
+    "should_repair": true
+  },
+  {
+    "name": "empty_object_valid",
+    "description": "Empty object is valid against empty schema",
+    "schema": {
+      "type": "object"
+    },
+    "input": "{}",
+    "expected_repair": "{}",
+    "should_repair": true
+  },
+  {
+    "name": "empty_array_valid",
+    "description": "Empty array is valid",
+    "schema": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "input": "[]",
+    "expected_repair": "[]",
+    "should_repair": true
+  },
+  {
+    "name": "unquoted_keys_nested",
+    "description": "Unquoted keys in nested objects",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "version": { "type": "string" },
+            "author": { "type": "string" }
+          }
+        }
+      }
+    },
+    "input": "{metadata: {version: \"1.0\", author: \"Grace\"}}",
+    "expected_repair": "{\"metadata\":{\"version\":\"1.0\",\"author\":\"Grace\"}}",
+    "should_repair": true
+  },
+  {
+    "name": "trailing_commas_multiple",
+    "description": "Multiple trailing commas in different places",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "a": { "type": "integer" },
+        "b": { "type": "integer" }
+      }
+    },
+    "input": "{\"a\": 10, \"b\": 20,}",
+    "expected_repair": "{\"a\":10,\"b\":20}",
+    "should_repair": true
+  },
+  {
+    "name": "python_none_in_array",
+    "description": "Python None values in array",
+    "schema": {
+      "type": "array",
+      "items": { "type": ["string", "null"] }
+    },
+    "input": "[\"first\", None, \"second\"]",
+    "expected_repair": "[\"first\",null,\"second\"]",
+    "should_repair": true
+  },
+  {
+    "name": "longer_conversational_prefix",
+    "description": "Long conversational text before JSON with markdown",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "summary": { "type": "string" }
+      },
+      "required": ["summary"]
+    },
+    "input": "Thank you for your question! Based on my analysis, here is the result:\n\n```json\n{\"summary\": \"The project is on track.\"}\n\nI hope this helps. Let me know if you have any follow-up questions!",
+    "expected_repair": "{\"summary\":\"The project is on track.\"}",
+    "should_repair": true
+  },
+  {
+    "name": "single_quotes_in_nested_text",
+    "description": "Single quotes containing apostrophes in text",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "quote": { "type": "string" }
+      },
+      "required": ["quote"]
+    },
+    "input": "{'quote': 'It\\'s working'}",
+    "expected_repair": "{\"quote\": \"It\\\"s working'}",
+    "should_repair": false
+  },
+  {
+    "name": "valid_number_types",
+    "description": "All valid number types should pass through",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "intVal": { "type": "integer" },
+        "floatVal": { "type": "number" },
+        "negVal": { "type": "number" }
+      }
+    },
+    "input": "{\"intVal\": 42, \"floatVal\": 3.14, \"negVal\": -7}",
+    "expected_repair": "{\"intVal\":42,\"floatVal\":3.14,\"negVal\":-7}",
+    "should_repair": true
+  },
+  {
+    "name": "string_to_float",
+    "description": "String float converted to number",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "temperature": { "type": "number" }
+      },
+      "required": ["temperature"]
+    },
+    "input": "{\"temperature\": \"98.6\"}",
+    "expected_repair": "{\"temperature\":98.6}",
+    "should_repair": true
+  },
+  {
+    "name": "truncated_array_in_object",
+    "description": "Truncated array inside object",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "results": {
+          "type": "array",
+          "items": { "type": "object", "properties": { "score": { "type": "number" } } }
+        }
+      }
+    },
+    "input": "{\"results\": [{\"score\": 0.95}, {\"score\": 0.",
+    "expected_repair": "{\"results\":[{\"score\":0.95}]}",
+    "should_repair": false
+  },
+  {
+    "name": "unquoted_keys_with_python_bool",
+    "description": "Unquoted keys combined with Python booleans",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "isValid": { "type": "boolean" },
+        "count": { "type": "integer" }
+      },
+      "required": ["isValid"]
+    },
+    "input": "{isValid: True, count: 3}",
+    "expected_repair": "{\"isValid\":true,\"count\":3}",
+    "should_repair": true
+  },
+  {
+    "name": "markdown_fences_with_truncated_inside",
+    "description": "Markdown fences around truncated JSON",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "properties": {
+            "value": { "type": "string" }
+          }
+        }
+      }
+    },
+    "input": "```json\n{\"data\": {\"value\": \"hello",
+    "expected_repair": "```json\n{\"data\": {\"value\": \"hello\"}}",
+    "should_repair": false
+  },
+  {
+    "name": "valid_string_unchanged",
+    "description": "Valid string value should not be modified",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "message": { "type": "string" }
+      },
+      "required": ["message"]
+    },
+    "input": "{\"message\": \"Hello, world!\"}",
+    "expected_repair": "{\"message\":\"Hello, world!\"}",
+    "should_repair": true
+  },
+  {
+    "name": "multiple_defaults_applied",
+    "description": "Multiple null values replaced with defaults at once",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "method": { "type": "string", "default": "GET" },
+        "port": { "type": "integer", "default": 80 },
+        "secure": { "type": "boolean", "default": false }
+      }
+    },
+    "input": "{\"method\": null, \"port\": null, \"secure\": null}",
+    "expected_repair": "{\"method\":\"GET\",\"port\":80,\"secure\":false}",
+    "should_repair": true
+  },
+  {
+    "name": "array_with_truncated_objects",
+    "description": "Array of truncated objects",
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" }
+        }
+      }
+    },
+    "input": "[{\"id\": 1, \"name\": \"A\", {\"id\": 2, \"name\": \"B\"]",
+    "expected_repair": "[{\"id\": 1, \"name\": \"A\", {\"id\": 2, \"name\": \"B\"]}}]",
+    "should_repair": false
+  },
+  {
+    "name": "chat_text_with_single_quotes",
+    "description": "Chat-like output with single quotes around values",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "response": { "type": "string" }
+      },
+      "required": ["response"]
+    },
+    "input": "Here you go: {'response': 'All done!'}",
+    "expected_repair": "{\"response\":\"All done!\"}",
+    "should_repair": true
+  },
+  {
+    "name": "deeply_nested_truncated_with_strings",
+    "description": "Deeply nested structure truncated mid-string",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "level1": {
+          "type": "object",
+          "properties": {
+            "level2": {
+              "type": "object",
+              "properties": {
+                "text": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "input": "{\"level1\": {\"level2\": {\"text\": \"deep",
+    "expected_repair": "{\"level1\":{\"level2\":{\"text\":\"deep\"}}}",
+    "should_repair": true
+  },
+  {
+    "name": "valid_with_unicode",
+    "description": "Valid JSON with unicode characters",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "city": { "type": "string" }
+      }
+    },
+    "input": "{\"name\": \"田中\", \"city\": \"東京\"}",
+    "expected_repair": "{\"name\":\"田中\",\"city\":\"東京\"}",
+    "should_repair": true
+  },
+  {
+    "name": "unquoted_keys_with_special_chars_in_value",
+    "description": "Unquoted keys with values containing colons and braces",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "path": { "type": "string" }
+      }
+    },
+    "input": "{url: \"https://example.com\", path: \"/a/b/c\"}",
+    "expected_repair": "{\"url\":\"https://example.com\",\"path\":\"/a/b/c\"}",
+    "should_repair": true
+  },
+  {
+    "name": "trailing_comma_in_nested",
+    "description": "Trailing comma in deeply nested structure",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "type": "object",
+          "properties": {
+            "database": {
+              "type": "object",
+              "properties": {
+                "host": { "type": "string" },
+                "port": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "input": "{\"config\": {\"database\": {\"host\": \"localhost\", \"port\": 5432,},},}",
+    "expected_repair": "{\"config\":{\"database\":{\"host\":\"localhost\",\"port\":5432}}}",
+    "should_repair": true
+  },
+  {
+    "name": "string_number_in_array",
+    "description": "Array of numeric strings that should be numbers",
+    "schema": {
+      "type": "array",
+      "items": { "type": "integer" }
+    },
+    "input": "[\"10\", \"20\", \"30\"]",
+    "expected_repair": "[10.0,20.0,30.0]",
+    "should_repair": true
+  },
+  {
+    "name": "python_bool_and_none_mixed",
+    "description": "Python True, False, and None all in one object",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "a": { "type": "boolean" },
+        "b": { "type": "boolean" },
+        "c": { "type": ["string", "null"] }
+      }
+    },
+    "input": "{\"a\": True, \"b\": False, \"c\": None}",
+    "expected_repair": "{\"a\":true,\"b\":false,\"c\":null}",
+    "should_repair": true
+  },
+  {
+    "name": "extract_json_from_long_chat",
+    "description": "JSON buried in a long multi-paragraph chat response",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" },
+        "data": { "type": "object" }
+      },
+      "required": ["status"]
+    },
+    "input": "I understand your request. Let me think about this carefully.\n\nBased on my understanding, you want me to provide a structured response.\n\nHere is the JSON:\n\n{\"status\": \"complete\", \"data\": {}}\n\nPlease let me know if there's anything else I can help with.\n\nBest regards,\nYour AI Assistant",
+    "expected_repair": "{\"status\":\"complete\",\"data\":{}}",
+    "should_repair": true
+  },
+  {
+    "name": "valid_boolean_array",
+    "description": "Valid boolean array should remain unchanged",
+    "schema": {
+      "type": "array",
+      "items": { "type": "boolean" }
+    },
+    "input": "[true, false, true]",
+    "expected_repair": "[true,false,true]",
+    "should_repair": true
+  },
+  {
+    "name": "markdown_fences_python_bool_unquoted",
+    "description": "Markdown + Python bools + unquoted keys",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "done": { "type": "boolean" }
+      },
+      "required": ["done"]
+    },
+    "input": "```json\n{done: False}\n```",
+    "expected_repair": "{\"done\":false}",
+    "should_repair": true
+  },
+  {
+    "name": "null_in_nested_array",
+    "description": "Null in nested array replaced with default",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "values": {
+          "type": "array",
+          "items": { "type": "string", "default": "unknown" }
+        }
+      }
+    },
+    "input": "{\"values\": [\"a\", null, \"b\"]}",
+    "expected_repair": "{\"values\":[\"a\",\"unknown\",\"b\"]}",
+    "should_repair": true
+  },
+  {
+    "name": "valid_object_with_null_field",
+    "description": "Object with one nullable field set to null - no repair needed if valid",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "nickname": { "type": ["string", "null"] }
+      },
+      "required": ["name"]
+    },
+    "input": "{\"name\": \"Henry\", \"nickname\": null}",
+    "expected_repair": "{\"name\":\"Henry\",\"nickname\":null}",
+    "should_repair": true
+  },
+  {
+    "name": "single_quote_in_value_with_apostrophe",
+    "description": "Single-quoted value containing apostrophe - tricky repair",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" }
+      },
+      "required": ["text"]
+    },
+    "input": "{'text': 'hello'}",
+    "expected_repair": "{\"text\":\"hello\"}",
+    "should_repair": true
+  },
+  {
+    "name": "numeric_string_with_decimal",
+    "description": "String containing integer value (no decimal) converted to number",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "integer" }
+      },
+      "required": ["id"]
+    },
+    "input": "{\"id\": \"42\"}",
+    "expected_repair": "{\"id\":42.0}",
+    "should_repair": true
+  }
+]
