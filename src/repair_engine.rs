@@ -358,3 +358,99 @@ pub fn repair(input: &str, schema: &Value) -> RepairResult {
         confidence_level: confidence,
     }
 }
+
+#[must_use]
+pub fn generate_correction_prompt(report: &ValidationReport, schema: &Value) -> Result<String, String> {
+    match report {
+        ValidationReport::Valid { .. } => Ok(String::new()),
+        ValidationReport::ParseError(info) => {
+            let sanitized = info.message.chars().take(120).collect::<String>();
+            Ok(format!(
+                "Your previous response was not valid JSON and could not be parsed. \
+                 Parse error: {} at line {}, column {}. \
+                 Please return only valid JSON with no additional text, markdown, or code fences.",
+                sanitized, info.line, info.column
+            ))
+        },
+        ValidationReport::SchemaErrors { violations } => {
+            if violations.is_empty() {
+                return Ok(String::from(
+                    "Your previous response was valid JSON but did not conform to the required schema.\n\
+                     Please review the schema and return valid JSON accordingly.",
+                ));
+            }
+
+            let error_messages: Vec<String> = violations
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    let type_hint = extract_type(schema, &v.path)
+                        .map(|expected_type| format!(" (expected: {})", expected_type))
+                        .unwrap_or_default();
+
+                    format!("{}. At '{}': {}{}", i + 1, v.path, v.message, type_hint)
+                })
+                .collect();
+
+            Ok(format!(
+                "Your previous response was valid JSON but did not conform to the required schema.\n\
+                 Please fix the following {} violation(s) and try again:\n{}\n\n\
+                 The required schema is:\n{}\n\n\
+                 Return only valid JSON that satisfies this schema, \
+                 with no additional text, markdown, or code fences.",
+                violations.len(),
+                error_messages.join("\n"),
+                serde_json::to_string_pretty(schema).unwrap_or_else(|_| schema.to_string())
+            ))
+        }
+        ValidationReport::InvalidSchema { message } => {
+            Err(format!("Invalid schema: {}", message))
+        },
+    }
+}
+
+fn get_type_from_value(v: &Value) -> Option<&str> {
+    v.get("type").and_then(|t| t.as_str())
+}
+
+#[must_use]
+pub fn extract_type<'a>(schema: &'a Value, path: &str) -> Option<&'a str> {
+    let segments: Vec<&str> = path.trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    let mut current: &'a Value = schema;
+
+    if segments.is_empty() {
+        return get_type_from_value(current);
+    }
+
+    for segment in &segments {
+        if let Some(props) = current.get("properties") {
+            if let Some(next) = props.get(segment) {
+                current = next;
+            } else if let Some(prefix_items) = current.get("prefixItems") {
+                if let Ok(idx) = segment.parse::<usize>() {
+                    if let Some(next) = prefix_items.get(idx) {
+                        current = next;
+                    } else {
+                        return None;
+                    }
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        } else if segment.parse::<usize>().is_ok() {
+            if let Some(itm) = current.get("items") {
+                current = itm;
+            } else if let Some(prefix_items) = current.get("prefixItems") {
+                current = prefix_items;
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+
+    get_type_from_value(current)
+}
