@@ -7,6 +7,7 @@ pub use confidence::*;
 
 use serde_json::Value;
 
+#[derive(Debug)]
 pub enum EnforcementResult {
     Valid { json: String },
     Repaired { json: String, rules_applied: Vec<RepairRule> },
@@ -22,7 +23,7 @@ pub fn enforce(initial_input: &str, schema: &Value) -> EnforcementResult {
     match generate_correction_prompt(&report, schema) {
         Err(err) => EnforcementResult::InvalidSchema { err: err.to_string() },
         Ok(prompt) if prompt.is_empty() => {
-            if repaired == initial_input {
+            if res.rule.is_empty() {
                 EnforcementResult::Valid { json: repaired }
             } else {
                 EnforcementResult::Repaired { json: repaired, rules_applied: res.rule }
