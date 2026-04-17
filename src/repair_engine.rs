@@ -1,7 +1,8 @@
 // use std::env::current_exe;
 
-use serde_json::Value;
 use regex::Regex;
+use serde_json::Value;
+use strum_macros::Display;
 
 use crate::confidence;
 
@@ -27,7 +28,7 @@ pub enum ValidationReport {
     InvalidSchema { message: String },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Display)]
 pub enum RepairRule {
     StripMarkdownFences,
     ExtractJsonPayload,
@@ -39,21 +40,25 @@ pub enum RepairRule {
     FixWrongNumericTypes,
     FixNullValues,
 
-    Custom { name: String, description: String, cost: f32 },
+    Custom {
+        name: String,
+        description: String,
+        cost: f32,
+    },
 }
 
 impl RepairRule {
     pub fn cost(&self) -> f32 {
         match self {
-            Self::StripMarkdownFences  => 0.02,
-            Self::ExtractJsonPayload   => 0.05,
-            Self::FixTrailingCommas    => 0.05,
-            Self::FixPythonBooleans    => 0.08,
-            Self::FixSingleQuotes      => 0.12,
-            Self::FixUnquotedKeys      => 0.15,
-            Self::FixTruncatedJson     => 0.40,
+            Self::StripMarkdownFences => 0.02,
+            Self::ExtractJsonPayload => 0.05,
+            Self::FixTrailingCommas => 0.05,
+            Self::FixPythonBooleans => 0.08,
+            Self::FixSingleQuotes => 0.12,
+            Self::FixUnquotedKeys => 0.15,
+            Self::FixTruncatedJson => 0.40,
             Self::FixWrongNumericTypes => 0.05,
-            Self::FixNullValues        => 0.10,
+            Self::FixNullValues => 0.10,
 
             Self::Custom { cost, .. } => cost.clamp(0.0, 1.0),
         }
@@ -204,7 +209,6 @@ pub fn fix_truncated_json(input: &str) -> Option<String> {
         repaired.push('"');
     }
 
-
     while let Some(top) = stack.pop() {
         if top == '[' {
             repaired.push(']');
@@ -252,7 +256,11 @@ pub fn extract_json_payload(input: &str) -> Option<String> {
     }
 }
 
-pub fn apply_schema_repairs(data: &mut serde_json::Value, schema: &serde_json::Value, applied_rules: &mut Vec<RepairRule>) {
+pub fn apply_schema_repairs(
+    data: &mut serde_json::Value,
+    schema: &serde_json::Value,
+    applied_rules: &mut Vec<RepairRule>,
+) {
     if data.is_string() {
         if let Some(typ) = schema.get("type").and_then(|v| v.as_str()) {
             if typ == "number" || typ == "integer" {
@@ -266,7 +274,7 @@ pub fn apply_schema_repairs(data: &mut serde_json::Value, schema: &serde_json::V
                         }
                         Err(e) => {
                             eprintln!("Failed to parse '{}' as number: {}", text, e);
-                        },
+                        }
                     }
                 }
             }
@@ -285,7 +293,7 @@ pub fn apply_schema_repairs(data: &mut serde_json::Value, schema: &serde_json::V
             }
         }
 
-        if let Some (obj) = data.as_object_mut() {
+        if let Some(obj) = data.as_object_mut() {
             if let Some(properties) = schema.get("properties") {
                 for (key, value) in obj.iter_mut() {
                     if let Some(prop_schema) = properties.get(key) {
@@ -360,7 +368,10 @@ pub fn repair(input: &str, schema: &Value) -> RepairResult {
 }
 
 #[must_use]
-pub fn generate_correction_prompt(report: &ValidationReport, schema: &Value) -> Result<String, String> {
+pub fn generate_correction_prompt(
+    report: &ValidationReport,
+    schema: &Value,
+) -> Result<String, String> {
     match report {
         ValidationReport::Valid { .. } => Ok(String::new()),
         ValidationReport::ParseError(info) => {
@@ -371,7 +382,7 @@ pub fn generate_correction_prompt(report: &ValidationReport, schema: &Value) -> 
                  Please return only valid JSON with no additional text, markdown, or code fences.",
                 sanitized, info.line, info.column
             ))
-        },
+        }
         ValidationReport::SchemaErrors { violations } => {
             if violations.is_empty() {
                 return Ok(String::from(
@@ -403,9 +414,7 @@ pub fn generate_correction_prompt(report: &ValidationReport, schema: &Value) -> 
                 serde_json::to_string_pretty(schema).unwrap_or_else(|_| schema.to_string())
             ))
         }
-        ValidationReport::InvalidSchema { message } => {
-            Err(format!("Invalid schema: {}", message))
-        },
+        ValidationReport::InvalidSchema { message } => Err(format!("Invalid schema: {}", message)),
     }
 }
 
@@ -415,7 +424,11 @@ fn get_type_from_value(v: &Value) -> Option<&str> {
 
 #[must_use]
 pub fn extract_type<'a>(schema: &'a Value, path: &str) -> Option<&'a str> {
-    let segments: Vec<&str> = path.trim_start_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    let segments: Vec<&str> = path
+        .trim_start_matches('/')
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
     let mut current: &'a Value = schema;
 
     if segments.is_empty() {
