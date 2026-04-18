@@ -93,5 +93,6 @@ fn otter(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(validate_py, m)?)?;
     m.add_function(wrap_pyfunction!(generate_prompt_py, m)?)?;
     m.add_function(wrap_pyfunction!(repair_py, m)?)?;
+    m.add_class::<ValidationStatus>()?;
     Ok(())
 }

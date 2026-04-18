@@ -13,22 +13,32 @@ pub struct PyRepairRule {
     pub cost: f32,
 }
 
-impl From<&RepairRule> for PyRepairRule {
-    fn from(rule: &RepairRule) -> Self {
+impl From<RepairRule> for PyRepairRule {
+    fn from(rule: RepairRule) -> Self {
         match rule {
             RepairRule::Custom {
                 name,
                 description,
                 cost,
             } => PyRepairRule {
-                name: name.clone(),
-                description: Some(description.clone()),
-                cost: *cost,
+                name,
+                description: Some(description),
+                cost,
             },
-            _ => PyRepairRule {
-                name: format!("{:?}", rule),
+            other => PyRepairRule {
+                name: format!("{:?}", other)
+                    .chars()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        if i > 0 && c.is_uppercase() {
+                            format!("_{}", c.to_lowercase())
+                        } else {
+                            c.to_lowercase().to_string()
+                        }
+                    })
+                    .collect(),
                 description: None,
-                cost: rule.cost(),
+                cost: other.cost(),
             },
         }
     }
@@ -49,7 +59,12 @@ impl From<&RepairResult> for PyRepairResult {
     fn from(res: &RepairResult) -> Self {
         PyRepairResult {
             repaired: res.repaired.clone(),
-            rules: res.rule.iter().map(PyRepairRule::from).collect(),
+            rules: res
+                .rule
+                .clone()
+                .into_iter()
+                .map(PyRepairRule::from)
+                .collect(),
             confidence_level: res.confidence_level,
         }
     }
@@ -212,7 +227,7 @@ impl From<EnforcementResult> for PyEnforcementResult {
             } => Self {
                 status: "Repaired".to_string(),
                 json: Some(json),
-                rules_applied: Some(rules_applied.iter().map(PyRepairRule::from).collect()),
+                rules_applied: Some(rules_applied.into_iter().map(PyRepairRule::from).collect()),
                 prompt: None,
                 error: None,
             },
