@@ -385,9 +385,13 @@ pub fn generate_correction_prompt(
         }
         ValidationReport::SchemaErrors { violations } => {
             if violations.is_empty() {
-                return Ok(String::from(
+                return Ok(format!(
                     "Your previous response was valid JSON but did not conform to the required schema.\n\
-                     Please review the schema and return valid JSON accordingly.",
+                     Please review the schema and return valid JSON accordingly.\n\n\
+                     The required schema is:\n{}\n\n\
+                     Return only valid JSON that satisfies this schema, \
+                     with no additional text, markdown, or code fences",
+                     serde_json::to_string_pretty(schema).unwrap_or_else(|_| schema.to_string())
                 ));
             }
 
