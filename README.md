@@ -12,60 +12,36 @@ Otter never mutates beyond schema constraints. No probabilistic fixes. Every tra
 
 ## API
 
-### enforce(input, schema)
+### `enforce(input, schema)`
 
-Primary entrypoint.
-
-Accepts raw LLM output + schema. Runs repair → validate → enforce.
+The primary entrypoint — and for most use cases, the only one you need. Accepts raw LLM output and a JSON Schema, attempts deterministic repair, validates the result, and returns one of four outcomes: conformant JSON, repaired JSON with the fixes applied, a correction prompt for the model, or an InvalidSchema error if the schema itself is malformed.
 
 ```python id="k1q8zs"
 result = otter.enforce(input, schema)
 ```
 
-Returns:
+The result always has a `status` field, which is one of `Valid`, `Repaired`, `NeedsCorrection`, or `InvalidSchema`. Depending on status, it also carries `json` (the final conformant output) or `prompt` (a correction prompt for the model). See [Result States](#result-states) below.
 
-* `status`: Valid | Repaired | NeedsCorrection | InvalidSchema
-* `json`: final output (if enforceable)
-* `prompt`: correction prompt (if needed)
+### `validate(json, schema)`
 
----
+Parse and validate without mutation. Useful when you want to check output you've already cleaned, or when you want validation separated from repair. Returns a status of `Valid`, `ParseError`, `SchemaErrors`, or `InvalidSchema`.
 
-### validate(json, schema)
+### `repair(input, schema)`
 
-Parse and validate. No mutation.
+Apply heuristic fixes and return the repaired JSON alongside the list of rules applied and a `confidence_level` between `0.0` and `1.0`. Use this directly when you want visibility into what was changed before committing to the result.
 
-Returns:
+### `generate_prompt(invalid_json, schema)`
 
-* `status`: Valid | ParseError | SchemaErrors | InvalidSchema
+Build a correction prompt from validation errors. This is what `enforce` calls internally when repair isn't sufficient, but you can call it directly to integrate correction prompts into your own retry loop.
 
----
-
-### repair(input, schema)
-
-Apply deterministic heuristic fixes.
-
-Returns:
-
-* `repaired`: fixed JSON
-* `rules`: applied fixes
-* `confidence_level`: 0.0–1.0
-
----
-
-### generate_prompt(invalid_json, schema)
-
-Build correction prompt from validation errors.
-
-Example:
-
-```id="y6f2ra"
+```
 Fix 1 violation:
 - age: expected number, got string
 
 Return valid JSON only.
 ```
 
-Full format → `/docs/prompts.md`
+Full prompt format is documented in [`/docs/prompts.md`](/docs/prompts.md).
 
 ---
 
