@@ -1,6 +1,6 @@
 # Prompt Format
 
-When `enforce` cannot repair invalid JSON, it calls `generate_correction_prompt` internally and returns the result as the `prompt` field on the result object. You can also call `generate_prompt` directly if you're managing your own retry loop.
+When `enforce` cannot repair invalid JSON, it calls `generate_correction_prompt` internally and returns the result as the `prompt` field on the result object. You can also call `generate_correction_prompt` directly if you're managing your own retry loop.
 
 The prompt format varies by failure type.
 
@@ -9,9 +9,7 @@ The prompt format varies by failure type.
 When the input isn't valid JSON at all, the prompt tells the model exactly where parsing broke down:
 
 ```
-Your previous response was not valid JSON and could not be parsed.
-Parse error: Unexpected token '}' at line 4, column 12.
-Please return only valid JSON with no additional text, markdown, or code fences.
+Your previous response was not valid JSON and could not be parsed. Parse error: Unexpected token '}' at line 4, column 12. Please return only valid JSON with no additional text, markdown, or code fences.
 ```
 
 The parse error message is taken directly from the parser and capped at 120 characters. Line and column numbers are always included so the model has a precise location to work from.
@@ -23,8 +21,8 @@ When the input is valid JSON but doesn't conform to the schema, the prompt lists
 ```
 Your previous response was valid JSON but did not conform to the required schema.
 Please fix the following 2 violation(s) and try again:
-1. At '/age': value must be a number (expected: number)
-2. At '/address/zip': required field is missing (expected: string)
+1. At '/age': <validator message> (expected: number)
+2. At '/address/zip': <validator message> (expected: string)
 
 The required schema is:
 {
@@ -35,9 +33,11 @@ The required schema is:
 Return only valid JSON that satisfies this schema, with no additional text, markdown, or code fences.
 ```
 
-Violations are numbered and each one references its exact field path in JSON Pointer notation (`/age`, `/address/zip`). Type hints are appended inline when `extract_type` can resolve the expected type by walking the schema to that path — object properties via `properties`, array items via `items` or indexed positions via `prefixItems`.
+Violations are numbered and each one references its exact field path in JSON Pointer notation (`/age`, `/address/zip`). The violation message is passed through from the validator as-is. Type hints are appended inline when `extract_type` can resolve the expected type by walking the schema to that path.
 
-When there are schema errors but Otter cannot enumerate specific violations, it omits the list and includes only the schema, asking the model to review it in full.
+`extract_type` navigates object properties via `properties` and array positions via `items` or `prefixItems`. For numeric path segments, it checks `items` first — if present, it follows that node regardless of the index, since `items` describes a uniform array type. `prefixItems` is used when `items` is absent, allowing index-specific type resolution for tuple schemas. If the path leads through a structure the walker doesn't recognise, the hint is omitted rather than guessed at.
+
+When the violations list is empty — valid JSON that fails schema conformance but with no enumerable violations — the prompt omits the list and includes only the full schema, asking the model to review it in full.
 
 ## Invalid Schema
 
@@ -47,6 +47,6 @@ When there are schema errors but Otter cannot enumerate specific violations, it 
 
 **The schema is always included in schema error prompts.** The model needs full context to fix violations correctly; asking it to correct field-level errors without the schema would produce speculative retries.
 
-**Type hints are best-effort.** `extract_type` walks the schema along the violation path and reads the `type` field at the destination node. If the path leads through a structure the walker doesn't recognise, the hint is omitted rather than guessed at.
+**Type hints are best-effort.** `extract_type` walks the schema along the violation path and reads the `type` field at the destination node. If the path cannot be resolved, the hint is silently omitted.
 
 **Prompts are plain text.** No markdown, no JSON fences in the prompt itself. The instruction to return JSON without fences or prose is included explicitly at the end of every prompt, since LLMs tend to wrap JSON in code blocks by default.
