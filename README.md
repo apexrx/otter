@@ -41,7 +41,7 @@ Fix 1 violation:
 Return valid JSON only.
 ```
 
-Full prompt format is documented in [`/docs/prompts.md`](/docs/prompts.md).
+Full prompt format is documented in [`/docs/prompts.md`](/docs/prompt.md).
 
 ---
 
