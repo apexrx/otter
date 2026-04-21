@@ -14,7 +14,7 @@ Otter never mutates beyond schema constraints. No probabilistic fixes. Every tra
 
 ### `enforce(input, schema)`
 
-The primary entrypoint — and for most use cases, the only one you need. Accepts raw LLM output and a JSON Schema, attempts deterministic repair, validates the result, and returns one of four outcomes: conformant JSON, repaired JSON with the fixes applied, a correction prompt for the model, or an InvalidSchema error if the schema itself is malformed.
+The primary entrypoint — and for most use cases, the only one you need. Accepts raw LLM output and a JSON Schema, sanitizes invalid escapes and control characters, attempts deterministic repair, validates the result, and returns one of four outcomes: conformant JSON, repaired JSON with the fixes applied, a correction prompt for the model, or an InvalidSchema error if the schema itself is malformed.
 
 ```python id="k1q8zs"
 result = otter.enforce(input, schema)
