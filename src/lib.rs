@@ -1,4 +1,5 @@
 mod repair_engine;
+mod preprocess;
 
 use serde_json::Value;
 
@@ -33,7 +34,9 @@ pub enum EnforcementResult {
 }
 
 pub fn enforce(initial_input: &str, schema: &Value) -> EnforcementResult {
-    let res = repair(initial_input, schema);
+    let cleaned_input = preprocess::sanitize_json(initial_input);
+
+    let res = repair(&cleaned_input, schema);
     let repaired = res.repaired;
     let report = validate(&repaired, schema);
 
