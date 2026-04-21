@@ -1,0 +1,33 @@
+name: Test Otter
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Core Rust Tests
+        run: cargo test
+
+      - name: Build and Test Python Bindings
+        run: |
+          make build-python
+          pip install target/wheels/otter-*.whl
+          python tests/test_bindings.py
+
+      - name: Build WASM
+        run: make build-wasm
