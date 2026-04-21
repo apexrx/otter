@@ -76,20 +76,15 @@ Otter is not a general ETL pipeline. It does not generate schemas from examples.
 
 ---
 
-## Install
-> **Note:** Otter is not yet published to crates.io, PyPI, or npm. The install commands below reflect the intended distribution — see the local build instructions to run from source in the meantime.
+## Getting Started
 
 ### Rust (Core Library)
 
-```bash id="z0r5pf"
-cargo add otter
-```
-
-Or in `Cargo.toml`:
+In `Cargo.toml`:
 
 ```toml id="j5u7kd"
 [dependencies]
-otter = "0.6.1"
+otter = { git = "https://github.com/apexrx/otter", branch = "main" }
 ```
 
 ---
@@ -99,7 +94,7 @@ otter = "0.6.1"
 Prebuilt wheels via PyPI. No Rust toolchain required.
 
 ```bash id="z2o8nc"
-pip install otter
+pip install git+https://github.com/apexrx/otter.git
 ```
 
 Requires Python 3.8+
@@ -115,21 +110,16 @@ pip install target/wheels/otter-*.whl --force-reinstall
 
 ### WebAssembly (Browser & Edge)
 
-**Option 1: npm / bundlers**
-
-```bash id="d3s9qa"
-npm install otter-wasm
-```
-
-**Option 2: ES Modules**
+To use Otter in the browser or on edge networks, you compile the WebAssembly package locally. Clone the repository and run the build command:
 
 ```bash id="l2p7fd"
 make build-wasm
 ```
+This generates a pkg/ directory containing the .wasm binary and the JavaScript bindings. You can then import it directly into your frontend code as an ES Module:
 
 ```html id="q8v1mw"
 <script type="module">
-  import init, { enforce_wasm } from './pkg/otter.js';
+  import init, { enforce_wasm } from './path/to/otter/pkg/otter.js';
   await init();
 </script>
 ```
