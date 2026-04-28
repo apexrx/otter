@@ -39,6 +39,7 @@ pub enum RepairRule {
     FixPythonBooleans,
     FixWrongNumericTypes,
     FixNullValues,
+    ArrayItemsDropped { count: usize },
 
     Custom {
         name: String,
@@ -59,6 +60,7 @@ impl RepairRule {
             Self::FixTruncatedJson => 0.40,
             Self::FixWrongNumericTypes => 0.05,
             Self::FixNullValues => 0.10,
+            Self::ArrayItemsDropped { count } => 0.15 * (*count as f32),
 
             Self::Custom { cost, .. } => cost.clamp(0.0, 1.0),
         }
@@ -285,24 +287,44 @@ pub fn apply_schema_repairs(
             applied_rules.push(RepairRule::FixNullValues);
         }
     } else {
-        if let Some(arr) = data.as_array_mut() {
-            if let Some(items_schema) = schema.get("items") {
-                for elm in arr.iter_mut() {
-                    apply_schema_repairs(elm, items_schema, applied_rules);
+            if let Some(arr) = data.as_array_mut() {
+                if let Some(items_schema) = schema.get("items") {
+                    let original_len = arr.len();
+
+                    for elm in arr.iter_mut() {
+                        apply_schema_repairs(elm, items_schema, applied_rules);
+                    }
+
+                    if let Some(expected_type) = items_schema.get("type").and_then(|t| t.as_str()) {
+                        arr.retain(|elm| {
+                            match expected_type {
+                                "string" => elm.is_string(),
+                                "number" | "integer" => elm.is_number(),
+                                "boolean" => elm.is_boolean(),
+                                "object" => elm.is_object(),
+                                "array" => elm.is_array(),
+                                _ => true,
+                            }
+                        });
+                    }
+
+                    let dropped_count = original_len - arr.len();
+                    if dropped_count > 0 {
+                        applied_rules.push(RepairRule::ArrayItemsDropped { count: dropped_count });
+                    }
                 }
             }
-        }
 
-        if let Some(obj) = data.as_object_mut() {
-            if let Some(properties) = schema.get("properties") {
-                for (key, value) in obj.iter_mut() {
-                    if let Some(prop_schema) = properties.get(key) {
-                        apply_schema_repairs(value, prop_schema, applied_rules);
+            if let Some(obj) = data.as_object_mut() {
+                if let Some(properties) = schema.get("properties") {
+                    for (key, value) in obj.iter_mut() {
+                        if let Some(prop_schema) = properties.get(key) {
+                            apply_schema_repairs(value, prop_schema, applied_rules);
+                        }
                     }
                 }
             }
         }
-    }
 }
 
 pub fn repair(input: &str, schema: &Value) -> RepairResult {
